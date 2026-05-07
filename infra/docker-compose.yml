@@ -1,0 +1,77 @@
+# Slot this into the existing CPX42 compose stack alongside the
+# `postiz` service. Add these services under the same docker-compose
+# project so `clipper-worker` can reach Postiz at http://postiz:3000.
+
+services:
+  clipper-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clipper
+      POSTGRES_PASSWORD: ${CLIPPER_PG_PASSWORD:-clipper}
+      POSTGRES_DB: clipper
+    volumes:
+      - clipper-pg-data:/var/lib/postgresql/data
+
+  clipper-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - clipper-redis-data:/data
+
+  clipper-web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - clipper-postgres
+      - clipper-redis
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://clipper:${CLIPPER_PG_PASSWORD:-clipper}@clipper-postgres:5432/clipper
+      REDIS_URL: redis://clipper-redis:6379
+      FIREBASE_ONDADEV_METRICS_KEY_B64: ${FIREBASE_ONDADEV_METRICS_KEY_B64}
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+      NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
+      APP_HOST: ${APP_HOST:-}
+      POSTIZ_API_URL: ${POSTIZ_API_URL:-http://postiz:3000/api/public/v1}
+      POSTIZ_API_KEY: ${POSTIZ_API_KEY}
+      STORAGE_ROOT: /storage
+    volumes:
+      - clipper-storage:/storage
+    # Expose via Traefik (or whatever reverse proxy is in front of Postiz).
+    # Add labels here matching the existing stack — example placeholders:
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.clipper.rule=Host(`clipper.ondadev.com`)"
+    #   - "traefik.http.routers.clipper.tls.certresolver=letsencrypt"
+    #   - "traefik.http.services.clipper.loadbalancer.server.port=3000"
+
+  clipper-worker:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.worker
+    restart: unless-stopped
+    depends_on:
+      - clipper-postgres
+      - clipper-redis
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://clipper:${CLIPPER_PG_PASSWORD:-clipper}@clipper-postgres:5432/clipper
+      REDIS_URL: redis://clipper-redis:6379
+      FIREBASE_ONDADEV_METRICS_KEY_B64: ${FIREBASE_ONDADEV_METRICS_KEY_B64}
+      POSTIZ_API_URL: ${POSTIZ_API_URL:-http://postiz:3000/api/public/v1}
+      POSTIZ_API_KEY: ${POSTIZ_API_KEY}
+      STORAGE_ROOT: /storage
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+    volumes:
+      - clipper-storage:/storage
+
+volumes:
+  clipper-pg-data:
+  clipper-redis-data:
+  clipper-storage:

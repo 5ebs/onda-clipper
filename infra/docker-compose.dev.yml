@@ -1,0 +1,24 @@
+# Local dev: just Postgres + Redis, run web/worker on the host with
+# `npm run dev` and `npm run worker`.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_USER: clipper
+      POSTGRES_PASSWORD: clipper
+      POSTGRES_DB: clipper
+    volumes:
+      - clipper-pg-dev:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6380:6379"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - clipper-redis-dev:/data
+
+volumes:
+  clipper-pg-dev:
+  clipper-redis-dev:

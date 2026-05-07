@@ -1,0 +1,23 @@
+node_modules
+.next
+.next/types
+out
+dist
+
+.env
+.env.local
+.env.production
+
+storage/
+*.log
+.DS_Store
+Thumbs.db
+
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+drizzle/meta/
+
+# Playwright MCP screenshots/output produced during dev sessions.
+.playwright-mcp/
+signin-*.png
