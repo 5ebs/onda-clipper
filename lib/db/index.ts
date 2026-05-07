@@ -2,10 +2,13 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-const url = process.env.DATABASE_URL;
-if (!url) {
-  throw new Error("DATABASE_URL is not set");
-}
+// `next build` collects page data by importing every route module
+// before runtime env is available. Throwing at module load (the obvious
+// "DATABASE_URL is not set" check) breaks the build. postgres-js doesn't
+// connect until the first query anyway, so we let module load succeed
+// with a placeholder and let the connection error surface at first use.
+const url =
+  process.env.DATABASE_URL ?? "postgres://buildtime@buildtime/buildtime";
 
 const client = postgres(url, { max: 10, prepare: false });
 

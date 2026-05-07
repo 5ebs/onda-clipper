@@ -1,14 +1,18 @@
 import { Queue } from "bullmq";
 import IORedis, { type RedisOptions } from "ioredis";
 
-const url = process.env.REDIS_URL;
-if (!url) throw new Error("REDIS_URL is not set");
+// Same trick as lib/db/index.ts: don't throw at module load (next build's
+// page-data collection imports route modules before runtime env exists).
+// ioredis lazyConnects, so a placeholder is harmless until first command.
+const url =
+  process.env.REDIS_URL ?? "redis://buildtime:6379/0";
 
 // BullMQ requires maxRetriesPerRequest=null and enableReadyCheck=false
 // on the connection used by workers. Use the same options for the queue
 // side so a single connection class works in both.
 const opts: RedisOptions = {
   maxRetriesPerRequest: null,
+  lazyConnect: true,
 };
 
 export const connection = new IORedis(url, opts);
