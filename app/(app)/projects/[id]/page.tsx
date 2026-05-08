@@ -9,6 +9,7 @@ import { ClipsLibrary } from "./clips-library";
 import { PlatformsForm } from "./platforms-form";
 import { CtaPreviewButton } from "./cta-preview-button";
 import { PlanButton } from "./plan-button";
+import { SchedulesPanel } from "./schedules-panel";
 
 function Stat({
   label,
@@ -200,6 +201,13 @@ export default async function ProjectDetail({
               : null
           }
         />
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+          Scheduled
+        </h2>
+        <SchedulesPanel projectId={project.id} />
       </section>
 
       <section className="flex flex-col gap-3">
