@@ -56,49 +56,61 @@ export async function handleStitch(job: Job<StitchJobData>) {
 
   await ensureProjectDirs(project.id);
 
-  // 1. Download source
-  await db
-    .update(schema.clips)
-    .set({ status: "downloading", error: null })
-    .where(eq(schema.clips.id, clip.id));
-  const src = sourcePath(project.id, clip.ytVideoId);
-  if (!(await fileExists(src))) {
-    await downloadVideo(clip.ytVideoId, src);
+  try {
+    // 1. Download source
+    await db
+      .update(schema.clips)
+      .set({ status: "downloading", error: null })
+      .where(eq(schema.clips.id, clip.id));
+    const src = sourcePath(project.id, clip.ytVideoId);
+    if (!(await fileExists(src))) {
+      await downloadVideo(clip.ytVideoId, src);
+    }
+    await db
+      .update(schema.clips)
+      .set({ status: "downloaded", sourcePath: src })
+      .where(eq(schema.clips.id, clip.id));
+
+    // 2. Trim + normalize source to a temp file in the stitched dir
+    await db
+      .update(schema.clips)
+      .set({ status: "stitching" })
+      .where(eq(schema.clips.id, clip.id));
+
+    const trimmed = path.join(
+      projectDir(project.id),
+      "stitched",
+      `${clip.ytVideoId}.trimmed.mp4`,
+    );
+    await normalizeAndKeep(src, trimmed, KEEP_SECONDS);
+
+    // 3. Normalize CTA (cached)
+    const ctaNorm = ctaNormalizedPath(project.id);
+    if (!(await fileExists(ctaNorm))) {
+      const rawCta = path.join(projectDir(project.id), project.ctaVideoPath);
+      await normalizeToSpec(rawCta, ctaNorm);
+    }
+
+    // 4. Concat
+    const out = stitchedPath(project.id, clip.ytVideoId);
+    await concatNormalized([trimmed, ctaNorm], out);
+
+    await db
+      .update(schema.clips)
+      .set({ status: "ready", stitchedPath: out, error: null })
+      .where(eq(schema.clips.id, clip.id));
+
+    console.log(`[stitch] clip=${clip.id} ready -> ${out}`);
+    return { stitchedPath: out };
+  } catch (err) {
+    // BullMQ would otherwise leave the clip stuck in `downloading` /
+    // `stitching` even after the job exhausts its retries. Mirror the
+    // job failure on the DB row so the UI shows the right state.
+    const message = err instanceof Error ? err.message : String(err);
+    await db
+      .update(schema.clips)
+      .set({ status: "failed", error: message.slice(0, 1000) })
+      .where(eq(schema.clips.id, clip.id));
+    throw err;
   }
-  await db
-    .update(schema.clips)
-    .set({ status: "downloaded", sourcePath: src })
-    .where(eq(schema.clips.id, clip.id));
-
-  // 2. Trim + normalize source to a temp file in the stitched dir
-  await db
-    .update(schema.clips)
-    .set({ status: "stitching" })
-    .where(eq(schema.clips.id, clip.id));
-
-  const trimmed = path.join(
-    projectDir(project.id),
-    "stitched",
-    `${clip.ytVideoId}.trimmed.mp4`,
-  );
-  await normalizeAndKeep(src, trimmed, KEEP_SECONDS);
-
-  // 3. Normalize CTA (cached)
-  const ctaNorm = ctaNormalizedPath(project.id);
-  if (!(await fileExists(ctaNorm))) {
-    const rawCta = path.join(projectDir(project.id), project.ctaVideoPath);
-    await normalizeToSpec(rawCta, ctaNorm);
-  }
-
-  // 4. Concat
-  const out = stitchedPath(project.id, clip.ytVideoId);
-  await concatNormalized([trimmed, ctaNorm], out);
-
-  await db
-    .update(schema.clips)
-    .set({ status: "ready", stitchedPath: out })
-    .where(eq(schema.clips.id, clip.id));
-
-  console.log(`[stitch] clip=${clip.id} ready -> ${out}`);
-  return { stitchedPath: out };
 }
