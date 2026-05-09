@@ -63,6 +63,7 @@ export async function handleSchedule(job: Job<ScheduleJobData>) {
     accountId: a.id,
     platform: a.identifier,
     caption: schedule.caption ?? "",
+    mediaId: media.id,
     mediaPath: media.path,
   }));
 

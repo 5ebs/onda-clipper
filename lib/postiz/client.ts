@@ -67,6 +67,7 @@ export type PostEntry = {
   /** identifier string from Postiz: "tiktok" | "instagram" | "youtube" | ... */
   platform: string;
   caption: string;
+  mediaId: string; // id returned by uploadMedia
   mediaPath: string; // path returned by uploadMedia
 };
 
@@ -96,6 +97,7 @@ function platformSettings(platform: string, caption: string): Record<string, unk
         stitch: true,
         comment: true,
         autoAddMusic: "no",
+        brand_content_toggle: false,
         brand_organic_toggle: false,
         content_posting_method: "DIRECT_POST",
       };
@@ -138,7 +140,7 @@ export async function createPost(
       value: [
         {
           content: p.caption || " ",
-          image: [{ path: p.mediaPath }],
+          image: [{ id: p.mediaId, path: p.mediaPath }],
         },
       ],
       settings: platformSettings(p.platform, p.caption),
