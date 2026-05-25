@@ -92,7 +92,11 @@ function platformSettings(platform: string, caption: string): Record<string, unk
       return {
         __type: "tiktok",
         title: titleFromCaption,
-        privacy_level: "PUBLIC_TO_EVERYONE",
+        // Until the TikTok app passes the "Content Sharing" audit it is
+        // tagged "unaudited" and can only post privately. Flip back to
+        // PUBLIC_TO_EVERYONE via env var once the audit lands.
+        privacy_level:
+          process.env.TIKTOK_PRIVACY_LEVEL ?? "SELF_ONLY",
         duet: true,
         stitch: true,
         comment: true,
