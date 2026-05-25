@@ -16,14 +16,15 @@ const concurrency = Number(process.env.WORKER_CONCURRENCY ?? "2");
 const workers = [
   new Worker(QUEUE_SCRAPE, handleScrape, { connection, concurrency }),
   new Worker(QUEUE_STITCH, handleStitch, { connection, concurrency }),
-  // Postiz public API has a NestJS Throttler (~10 req / 60s by default).
-  // Serialise + cap at 1 call per 7s so a 90-clip plan doesn't 429 itself
-  // out. 90 schedules then take ~10 minutes to fan out — fine for the
-  // one-shot Plan flow.
+  // Postiz public API has multiple throttle tiers. Empirically the
+  // per-minute is loose (~10) but a per-hour cap hits hard after ~30
+  // successes, with the rest 429'ing for minutes. Pace at 1 every 30s
+  // (2/min, 120/h) — comfortably under both. A 90-clip Plan now takes
+  // ~45 min to drain, which is still "fire and forget".
   new Worker(QUEUE_SCHEDULE, handleSchedule, {
     connection,
     concurrency: 1,
-    limiter: { max: 1, duration: 7_000 },
+    limiter: { max: 1, duration: 30_000 },
   }),
   new Worker(QUEUE_PLAN, handlePlan, { connection, concurrency: 1 }),
 ];
