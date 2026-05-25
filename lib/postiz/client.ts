@@ -93,10 +93,9 @@ function platformSettings(platform: string, caption: string): Record<string, unk
         __type: "tiktok",
         title: titleFromCaption,
         // PUBLIC_TO_EVERYONE requires the TikTok app to pass the
-        // "Content Sharing" audit. Until then TikTok 400s with
-        // "unaudited_client_can_only_post_to_private_accounts" even if
-        // we lower to SELF_ONLY (the rule is on the account, not the
-        // post). Override via env if you're testing on a private account.
+        // "Content Sharing" audit. While the audit is pending we use
+        // UPLOAD (drafts/inbox mode) which works on any account; flip
+        // both env vars back when the audit lands.
         privacy_level:
           process.env.TIKTOK_PRIVACY_LEVEL ?? "PUBLIC_TO_EVERYONE",
         duet: true,
@@ -105,7 +104,12 @@ function platformSettings(platform: string, caption: string): Record<string, unk
         autoAddMusic: "no",
         brand_content_toggle: false,
         brand_organic_toggle: false,
-        content_posting_method: "DIRECT_POST",
+        // DIRECT_POST = publishes to TikTok timeline (needs audit).
+        // UPLOAD     = sends to the user's TikTok "Drafts" inbox so
+        // the operator publishes manually with a swipe. UPLOAD works
+        // without the content audit.
+        content_posting_method:
+          process.env.TIKTOK_POSTING_METHOD ?? "UPLOAD",
       };
     case "instagram":
     case "instagram-standalone":
