@@ -92,11 +92,13 @@ function platformSettings(platform: string, caption: string): Record<string, unk
       return {
         __type: "tiktok",
         title: titleFromCaption,
-        // Until the TikTok app passes the "Content Sharing" audit it is
-        // tagged "unaudited" and can only post privately. Flip back to
-        // PUBLIC_TO_EVERYONE via env var once the audit lands.
+        // PUBLIC_TO_EVERYONE requires the TikTok app to pass the
+        // "Content Sharing" audit. Until then TikTok 400s with
+        // "unaudited_client_can_only_post_to_private_accounts" even if
+        // we lower to SELF_ONLY (the rule is on the account, not the
+        // post). Override via env if you're testing on a private account.
         privacy_level:
-          process.env.TIKTOK_PRIVACY_LEVEL ?? "SELF_ONLY",
+          process.env.TIKTOK_PRIVACY_LEVEL ?? "PUBLIC_TO_EVERYONE",
         duet: true,
         stitch: true,
         comment: true,
