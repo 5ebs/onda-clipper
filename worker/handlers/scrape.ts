@@ -51,6 +51,7 @@ export async function handleScrape(job: Job<ScrapeJobData>) {
       fresh.map((f) => ({
         projectId,
         ytVideoId: f.id,
+        sourceChannel: channelHandle,
         title: f.title,
         viewCount: f.viewCount,
         thumbnailUrl: f.thumbnail,

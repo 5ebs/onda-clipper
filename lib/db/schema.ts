@@ -114,6 +114,11 @@ export const clips = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     ytVideoId: text("yt_video_id").notNull(),
+    /** The channel handle this clip was scraped from. Captured at scrape
+     *  time so we can still attribute clips after the project's default
+     *  channel_handle has been overwritten by a later scrape on a
+     *  different source. */
+    sourceChannel: text("source_channel"),
     title: text("title"),
     viewCount: integer("view_count"),
     thumbnailUrl: text("thumbnail_url"),

@@ -40,6 +40,7 @@ export async function GET(
       ytVideoId: schema.clips.ytVideoId,
       title: schema.clips.title,
       thumbnailUrl: schema.clips.thumbnailUrl,
+      sourceChannel: schema.clips.sourceChannel,
     })
     .from(schema.schedules)
     .innerJoin(schema.clips, eq(schema.schedules.clipId, schema.clips.id))
