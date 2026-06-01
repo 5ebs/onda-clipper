@@ -1,5 +1,5 @@
 import type { Job } from "bullmq";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { scheduleQueue } from "@/lib/queue";
 import type { PlanJobData, ScheduleJobData } from "@/lib/queue/jobs";
@@ -36,6 +36,10 @@ export async function handlePlan(job: Job<PlanJobData>) {
   }
 
   const need = plan.days * plan.perDay;
+  const channelFilter =
+    plan.sourceChannels && plan.sourceChannels.length > 0
+      ? inArray(schema.clips.sourceChannel, plan.sourceChannels)
+      : undefined;
   const ready = await db
     .select()
     .from(schema.clips)
@@ -43,6 +47,7 @@ export async function handlePlan(job: Job<PlanJobData>) {
       and(
         eq(schema.clips.projectId, plan.projectId),
         eq(schema.clips.status, "ready"),
+        ...(channelFilter ? [channelFilter] : []),
       ),
     )
     .orderBy(desc(schema.clips.viewCount), desc(schema.clips.createdAt))

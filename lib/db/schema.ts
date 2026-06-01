@@ -92,6 +92,9 @@ export const plans = pgTable(
     /** Times of day in HH:mm. Length should equal perDay. */
     times: jsonb("times").$type<string[]>().notNull(),
     startDate: timestamp("start_date", { withTimezone: true }).notNull(),
+    /** Optional whitelist of source channels (clip.source_channel values).
+     *  Null/empty = pull from any channel in the project. */
+    sourceChannels: jsonb("source_channels").$type<string[]>(),
     status: planStatus("status").notNull().default("preparing"),
     /** How many clips of `days * perDay` are already scheduled. */
     scheduledCount: integer("scheduled_count").notNull().default(0),

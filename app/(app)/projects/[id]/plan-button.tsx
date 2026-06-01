@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,26 +18,39 @@ type PlanRow = {
   error: string | null;
 };
 
+type Channel = { handle: string; count: number };
+
+function prettyChannel(handle: string) {
+  return handle
+    .replace(/^https?:\/\/(www\.)?youtube\.com\//, "")
+    .replace(/\/shorts\/?$/, "")
+    .replace(/\/$/, "");
+}
+
 export function PlanButton({
   projectId,
   defaultPerDay,
   defaultTimes,
+  availableChannels,
   activePlan,
 }: {
   projectId: string;
   defaultPerDay: number;
   defaultTimes: string[];
+  availableChannels: Channel[];
   activePlan: PlanRow | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [days, setDays] = useState("30");
   const [startDate, setStartDate] = useState(tomorrowISO());
+  const [selectedChannels, setSelectedChannels] = useState<Set<string>>(
+    () => new Set(availableChannels.map((c) => c.handle)),
+  );
+  const [skipScrape, setSkipScrape] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Auto-refresh the page while a plan is preparing/scheduling so the
-  // progress bar updates without manual reload.
   useEffect(() => {
     if (!activePlan) return;
     if (activePlan.status === "scheduled" || activePlan.status === "failed") {
@@ -47,10 +60,24 @@ export function PlanButton({
     return () => clearInterval(t);
   }, [activePlan, router]);
 
+  const available = useMemo(
+    () =>
+      selectedChannels.size > 0
+        ? availableChannels
+            .filter((c) => selectedChannels.has(c.handle))
+            .reduce((s, c) => s + c.count, 0)
+        : availableChannels.reduce((s, c) => s + c.count, 0),
+    [selectedChannels, availableChannels],
+  );
+  const need = parseInt(days, 10) * defaultPerDay || 0;
+  const shortBy = Math.max(0, need - available);
+
   async function submit() {
     setBusy(true);
     setError(null);
     try {
+      const allSelected =
+        selectedChannels.size === availableChannels.length;
       const res = await fetch(`/api/projects/${projectId}/plan`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -58,6 +85,10 @@ export function PlanButton({
           days: parseInt(days, 10),
           perDay: defaultPerDay,
           startDate,
+          sourceChannels: allSelected
+            ? undefined
+            : Array.from(selectedChannels),
+          skipScrape,
         }),
       });
       if (!res.ok) {
@@ -72,10 +103,17 @@ export function PlanButton({
     }
   }
 
+  function toggleChannel(handle: string) {
+    setSelectedChannels((prev) => {
+      const next = new Set(prev);
+      if (next.has(handle)) next.delete(handle);
+      else next.add(handle);
+      return next;
+    });
+  }
+
   if (activePlan) {
-    return (
-      <PlanProgress plan={activePlan} />
-    );
+    return <PlanProgress plan={activePlan} />;
   }
 
   return (
@@ -88,40 +126,127 @@ export function PlanButton({
         <Modal onClose={() => setOpen(false)}>
           <h2 className="text-base font-medium">Plan</h2>
           <p className="text-sm text-muted-foreground">
-            We'll scrape, stitch, and schedule {defaultPerDay} clips per day
-            ({defaultTimes.join(", ")}) starting on the chosen date. You can
-            close this tab — the worker will keep running.
+            We&apos;ll schedule {defaultPerDay} clips per day (
+            {defaultTimes.join(", ")}) from the channels you pick.
           </p>
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="days">Days</Label>
-              <Input
-                id="days"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={days}
-                onChange={(e) => setDays(e.target.value.replace(/[^0-9]/g, ""))}
-                placeholder="30"
-              />
+
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="days">Days</Label>
+                <Input
+                  id="days"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={days}
+                  onChange={(e) =>
+                    setDays(e.target.value.replace(/[^0-9]/g, ""))
+                  }
+                  placeholder="30"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="startDate">Start date</Label>
+                <Input
+                  id="startDate"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="startDate">Start date</Label>
-              <Input
-                id="startDate"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+
+            {availableChannels.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                  Source channels
+                </span>
+                <div className="flex flex-col gap-1">
+                  {availableChannels.map((c) => {
+                    const on = selectedChannels.has(c.handle);
+                    return (
+                      <button
+                        type="button"
+                        key={c.handle}
+                        onClick={() => toggleChannel(c.handle)}
+                        className={`flex items-center justify-between rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors ${
+                          on
+                            ? "border-ring bg-secondary"
+                            : "border-border hover:bg-accent"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`flex h-4 w-4 items-center justify-center rounded-sm border ${
+                              on
+                                ? "border-ring bg-ring text-background"
+                                : "border-border"
+                            }`}
+                          >
+                            {on && (
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3"
+                                className="h-3 w-3"
+                              >
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </span>
+                          {prettyChannel(c.handle)}
+                        </span>
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          {c.count} ready
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={skipScrape}
+                onChange={(e) => setSkipScrape(e.target.checked)}
+                className="h-4 w-4 rounded border-border bg-background"
               />
-            </div>
+              <span>
+                Use only existing clips
+                <span className="ml-1.5 text-xs text-muted-foreground">
+                  (no new scrape — uncheck to also pull fresh from the
+                  project default channel)
+                </span>
+              </span>
+            </label>
+
             <p className="text-xs text-muted-foreground">
-              Total clips: {parseInt(days, 10) * defaultPerDay || 0} · times{" "}
-              {defaultTimes.join(", ")}
+              Plan needs{" "}
+              <span className="text-foreground tabular-nums">{need}</span>{" "}
+              clips · available from selection:{" "}
+              <span className="text-foreground tabular-nums">{available}</span>
+              {shortBy > 0 && (
+                <span className="text-destructive">
+                  {" "}
+                  · short by {shortBy} (the worker will wait for new
+                  clips to land if you leave scrape on)
+                </span>
+              )}
             </p>
           </div>
+
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">
-            <Button onClick={submit} disabled={busy}>
+            <Button
+              onClick={submit}
+              disabled={
+                busy || selectedChannels.size === 0 || parseInt(days, 10) <= 0
+              }
+            >
               {busy ? "Starting…" : "Start plan"}
             </Button>
             <Button variant="ghost" onClick={() => setOpen(false)}>

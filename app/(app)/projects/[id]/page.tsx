@@ -186,6 +186,17 @@ export default async function ProjectDetail({
           defaultTimes={
             project.postingTimes ?? ["09:00", "14:00", "19:00"]
           }
+          availableChannels={Array.from(
+            clips.reduce<Map<string, number>>((acc, c) => {
+              if (c.status !== "ready") return acc;
+              const k = c.sourceChannel ?? "";
+              if (!k) return acc;
+              acc.set(k, (acc.get(k) ?? 0) + 1);
+              return acc;
+            }, new Map()),
+          )
+            .map(([handle, count]) => ({ handle, count }))
+            .sort((a, b) => b.count - a.count)}
           activePlan={
             activePlan
               ? {

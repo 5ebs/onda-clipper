@@ -13,6 +13,11 @@ const Body = z.object({
   perDay: z.number().int().min(1).max(6).default(3),
   times: z.array(z.string().regex(TIME_RE)).min(1).max(6).optional(),
   startDate: z.string().date().optional(), // YYYY-MM-DD
+  /** Whitelist of source channel handles to pull from. Omit for "any". */
+  sourceChannels: z.array(z.string().min(1)).max(20).optional(),
+  /** Skip the initial scrape — use only clips already in the library.
+   *  Useful when the user already has enough ready clips. */
+  skipScrape: z.boolean().optional(),
 });
 
 export async function POST(
@@ -33,12 +38,6 @@ export async function POST(
     );
   if (!project) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
-  if (!project.channelHandle) {
-    return NextResponse.json(
-      { error: "no_source_channel" },
-      { status: 400 },
-    );
   }
   if (!project.ctaVideoPath) {
     return NextResponse.json({ error: "no_cta" }, { status: 400 });
@@ -75,6 +74,10 @@ export async function POST(
     : nextDayUTC();
 
   const need = days * perDay;
+  const sourceChannels =
+    parsed.data.sourceChannels && parsed.data.sourceChannels.length > 0
+      ? parsed.data.sourceChannels
+      : null;
 
   // Create the plan row.
   const [plan] = await db
@@ -85,23 +88,30 @@ export async function POST(
       perDay,
       times,
       startDate,
+      sourceChannels,
       status: "preparing",
     })
     .returning();
 
-  // Trigger a scrape — pull a generous buffer above the strict need so
-  // that minViews filters / dedupe don't leave us short.
-  const scrapeData: ScrapeJobData = {
-    projectId: id,
-    channelHandle: project.channelHandle,
-    limit: Math.ceil(need * 1.5),
-  };
-  await scrapeQueue.add("scrape", scrapeData, {
-    attempts: 2,
-    backoff: { type: "exponential", delay: 30_000 },
-    removeOnComplete: 100,
-    removeOnFail: 100,
-  });
+  // Trigger a scrape if asked. When skipScrape is true (or the project
+  // has no default channelHandle to scrape from), rely on whatever is
+  // already in the library. Useful when the user is composing a plan
+  // from clips they've curated.
+  const shouldScrape =
+    !parsed.data.skipScrape && Boolean(project.channelHandle);
+  if (shouldScrape) {
+    const scrapeData: ScrapeJobData = {
+      projectId: id,
+      channelHandle: project.channelHandle!,
+      limit: Math.ceil(need * 1.5),
+    };
+    await scrapeQueue.add("scrape", scrapeData, {
+      attempts: 2,
+      backoff: { type: "exponential", delay: 30_000 },
+      removeOnComplete: 100,
+      removeOnFail: 100,
+    });
+  }
 
   // Watch the plan: re-runs every minute (via attempt backoff) until
   // there are enough ready clips, then schedules them.
